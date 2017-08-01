@@ -1,9 +1,10 @@
+import redis
 import scrapy
 
 
 class Top10Spider(scrapy.Spider):
     name = "top10"
-    top10list = {}
+    r = redis.StrictRedis(host='localhost', port=6379, db=0)
 
     def start_requests(self):
         urls = [
@@ -15,7 +16,6 @@ class Top10Spider(scrapy.Spider):
     def parse(self, response):
         list = response.css('#main > div:nth-child(2) > div.chart-data')
         date = list.css('::attr(data-chartdate)').extract_first()
-        self.top10list[date] = {}
 	for item in list.css('div > article.chart-row'):
             container = item.css('div.chart-row__primary > div.chart-row__main-display > div.chart-row__container > div.chart-row__title')
             song = container.css('h2::text').extract_first()
@@ -24,10 +24,19 @@ class Top10Spider(scrapy.Spider):
                 artist = artist[0]
             position = item.css('div.chart-row__primary > div.chart-row__main-display > div.chart-row__rank > span.chart-row__current-week::text').extract_first()
             last_week_position = item.css('div.chart-row__secondary > div > div.chart-row__last-week > span.chart-row__value::text').extract_first()
-            self.top10list[date][position] = {"artist": artist, "song": song, "position": position, "last_week_position": last_week_position}
+           
+            #verify if user does not have a score yet, it means it is the first time in the top ten list
+            if not self.r.zscore('weeksOnTop10', artist):
+                self.r.zadd('weeksOnTop10', 0, artist)
+            
+            #verify if user does not have been set for this week already, to prevent counting artist for being twice in the top ten at the same week
+            if artist and not self.r.get(artist + date):
+                self.r.set(artist + date, 1)
+                self.r.zincrby('weeksOnTop10', artist, 1)
+            
+            #stop parsing after position 10
             if position and int(position) >= 10:
                 break
-        print self.top10list
 
 
 class Last50WeeksSpider(Top10Spider):
@@ -42,3 +51,5 @@ class Last50WeeksSpider(Top10Spider):
             self.week += 1
             next_page = response.urljoin(next_page)
             yield scrapy.Request(next_page, callback=self.parse)
+
+        self.r.zrange('weeksOnTop10', 0, -1, withscores=True)
