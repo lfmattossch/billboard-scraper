@@ -22,21 +22,34 @@ class Top10Spider(scrapy.Spider):
             artist = container.css('a::text').re(r'.+?(?= Featuring|\n)')
             if artist:
                 artist = artist[0]
-            position = item.css('div.chart-row__primary > div.chart-row__main-display > div.chart-row__rank > span.chart-row__current-week::text').extract_first()
-            last_week_position = item.css('div.chart-row__secondary > div > div.chart-row__last-week > span.chart-row__value::text').extract_first()
+                position = item.css('div.chart-row__primary > div.chart-row__main-display > div.chart-row__rank > span.chart-row__current-week::text').extract_first()
+                last_week_position = item.css('div.chart-row__secondary > div > div.chart-row__last-week > span.chart-row__value::text').extract_first()
            
-            #verify if user does not have a score yet, it means it is the first time in the top ten list
-            if not self.r.zscore('weeksOnTop10', artist):
-                self.r.zadd('weeksOnTop10', 0, artist)
-            
-            #verify if user does not have been set for this week already, to prevent counting artist for being twice in the top ten at the same week
-            if artist and not self.r.get(artist + date):
-                self.r.set(artist + date, 1)
-                self.r.zincrby('weeksOnTop10', artist, 1)
-            
-            #stop parsing after position 10
-            if position and int(position) >= 10:
-                break
+                #stop parsing after position 10
+                if position and int(position) > 10:
+                    break
+           
+                if int(position) == 1:
+                    #in case user has never been in first place
+                    if not self.r.zscore('weeksInFirstPlace', artist):
+                        self.r.zadd('weeksInFirstPlace', 0, artist)
+                        self.r.zadd('weeksInFirstPlace', 0, artist + ';lastGreatestRun')
+                    #if his last week position was not first save in another variable and set score to zero                   
+                    elif last_week_position and int(last_week_position) != 1:
+                        import pudb; pu.db
+                        if self.r.zscore('weeksInFirstPlace', artist + ';lastGreatestRun') <= self.r.zscore('weeksInFirstPlace', artist):
+                            self.r.zadd('weeksInFirstPlace', int(self.r.zscore('weeksInFirstPlace', artist)) + 1, artist + ';lastGreatestRun')
+                        self.r.zadd('weeksInFirstPlace', -1, artist)
+                    self.r.zincrby('weeksInFirstPlace', artist, 1)
+          
+                #verify if user does not have a score yet, it means it is the first time in the top ten list
+                if not self.r.zscore('weeksOnTop10', artist):
+                    self.r.zadd('weeksOnTop10', 0, artist)
+           
+                #verify if user does not have been set for this week already, to prevent counting artist for being twice in the top ten at the same week
+                if not self.r.get(artist + date):
+                    self.r.set(artist + date, 1)
+                    self.r.zincrby('weeksOnTop10', artist, 1)
 
 
 class Last50WeeksSpider(Top10Spider):
