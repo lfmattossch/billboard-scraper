@@ -36,7 +36,6 @@ class Top10Spider(scrapy.Spider):
                         self.r.zadd('weeksInFirstPlace', 0, artist + ';lastGreatestRun')
                     #if his last week position was not first save in another variable and set score to zero                   
                     elif last_week_position and int(last_week_position) != 1:
-                        import pudb; pu.db
                         if self.r.zscore('weeksInFirstPlace', artist + ';lastGreatestRun') <= self.r.zscore('weeksInFirstPlace', artist):
                             self.r.zadd('weeksInFirstPlace', int(self.r.zscore('weeksInFirstPlace', artist)) + 1, artist + ';lastGreatestRun')
                         self.r.zadd('weeksInFirstPlace', -1, artist)
