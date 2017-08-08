@@ -1,1 +1,4 @@
-Scrapy
+pudb==2017.1.2
+redis==2.10.5
+Scrapy==1.4.0
+Twisted==17.5.0
